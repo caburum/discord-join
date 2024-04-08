@@ -13,6 +13,7 @@ GUILD_ID = int(environ.get('GUILD_ID'))
 CHANNEL_ID = int(environ.get('CHANNEL_ID'))
 USER_ID = int(environ.get('USER_ID'))
 MOD_IDS = [int(id) for id in environ.get('MOD_IDS').split(',')]
+TIMEZONE = pytz.timezone(environ.get('TIMEZONE'))
 
 class MyClient(discord.Client):
 	async def on_ready(self):
@@ -67,18 +68,22 @@ async def joinalert(interaction: discord.Interaction, time: str):
 		await interaction.response.send_message("you thought", ephemeral=True)
 		return
 
-	settings = {"RELATIVE_BASE": datetime.now(tz=pytz.timezone("America/New_York"))}
+	settings = {"RELATIVE_BASE": datetime.now(tz=TIMEZONE), "RETURN_AS_TIMEZONE_AWARE": True}
 
 	parsedTime = parse(time, settings=settings)
 	print(time, parsedTime)
 
-	if 'am' not in time.lower() and parsedTime.hour < 12:
+	if parsedTime is not None and 'am' not in time.lower() and parsedTime.hour < 12:
 		time = time + ' pm'
 		parsedTime = parse(time, settings=settings)
-	print(parsedTime, datetime.now(tz=parsedTime.tzinfo), parsedTime.tzinfo)
+	print('now', datetime.now(tz=TIMEZONE), TIMEZONE, 'target', parsedTime, parsedTime.tzinfo)
 
-	if parsedTime < datetime.now(tz=parsedTime.tzinfo).replace(second=0, microsecond=0):
+	if parsedTime is None:
 		await interaction.response.send_message("invalid time", ephemeral=True)
+		return
+
+	if parsedTime < datetime.now(tz=TIMEZONE).replace(second=0, microsecond=0):
+		await interaction.response.send_message("past time", ephemeral=True)
 		return
 
 	member = client.get_guild(GUILD_ID).get_member(USER_ID)
