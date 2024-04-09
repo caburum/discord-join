@@ -73,16 +73,19 @@ async def joinalert(interaction: discord.Interaction, time: str):
 	parsedTime = parse(time, settings=settings)
 	print(time, parsedTime)
 
-	if parsedTime is not None and 'am' not in time.lower() and parsedTime.hour < 12:
-		time = time + ' pm'
-		parsedTime = parse(time, settings=settings)
-	print('now', datetime.now(tz=TIMEZONE), TIMEZONE, 'target', parsedTime, parsedTime.tzinfo)
-
 	if parsedTime is None:
 		await interaction.response.send_message("invalid time", ephemeral=True)
 		return
 
-	if parsedTime < datetime.now(tz=TIMEZONE).replace(second=0, microsecond=0):
+	now = datetime.now(tz=TIMEZONE).replace(second=0, microsecond=0) # round to minute
+
+	# assume time without additional info will be in future pm
+	if parsedTime.date() == now.date() and 'am' not in time.lower() and parsedTime.hour < 12 and parsedTime.hour < now.hour:
+		time = time + ' pm'
+		parsedTime = parse(time, settings=settings)
+	print('now', datetime.now(tz=TIMEZONE), TIMEZONE, 'target', parsedTime, parsedTime.tzinfo)
+
+	if parsedTime < now:
 		await interaction.response.send_message("past time", ephemeral=True)
 		return
 
