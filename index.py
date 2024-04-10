@@ -1,7 +1,7 @@
 import dotenv
 from os import environ
 import discord
-from discord import app_commands
+from discord import app_commands, DiscordException
 from dateparser import parse
 from datetime import datetime
 import pytz
@@ -46,10 +46,13 @@ async def schedule_task(targetTime: datetime):
 	message = await channel.send(text)
 	thread = await channel.create_thread(name="late alert", message=message, auto_archive_duration=60)
 
-	for _ in range(500):
+	for _ in range(600):
 		if stop.is_set(): return
-		await thread.send(text)
-		await asyncio.sleep(1.5)
+		try:
+			await thread.send(text)
+			await asyncio.sleep(1.5)
+		except DiscordException:
+			await asyncio.sleep(5)
 
 @client.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -64,48 +67,51 @@ tree = app_commands.CommandTree(client)
 	guild=discord.Object(id=GUILD_ID)
 )
 async def joinalert(interaction: discord.Interaction, time: str):
-	if interaction.user.id not in MOD_IDS:
-		await interaction.response.send_message("you thought", ephemeral=True)
-		return
+	try:
+		if interaction.user.id not in MOD_IDS:
+			await interaction.response.send_message("you thought", ephemeral=True)
+			return
 
-	settings = {"RELATIVE_BASE": datetime.now(tz=TIMEZONE), "RETURN_AS_TIMEZONE_AWARE": True}
+		settings = {"RELATIVE_BASE": datetime.now(tz=TIMEZONE), "RETURN_AS_TIMEZONE_AWARE": True}
 
-	parsedTime = parse(time, settings=settings)
-	print(time, parsedTime)
-
-	if parsedTime is None:
-		await interaction.response.send_message("invalid time", ephemeral=True)
-		return
-
-	now = datetime.now(tz=TIMEZONE).replace(second=0, microsecond=0) # round to minute
-
-	# assume time without additional info will be in future pm
-	if parsedTime.date() == now.date() and 'am' not in time.lower() and parsedTime.hour < 12 and parsedTime.replace(second=0, microsecond=0) <= now:
-		time = time + ' pm'
 		parsedTime = parse(time, settings=settings)
-	print('now', now, now.tzinfo, 'target', parsedTime, parsedTime.tzinfo)
+		print(time, parsedTime)
 
-	if parsedTime < now:
-		await interaction.response.send_message("past time", ephemeral=True)
-		return
+		if parsedTime is None:
+			await interaction.response.send_message("invalid time", ephemeral=True)
+			return
 
-	member = client.get_guild(GUILD_ID).get_member(USER_ID)
+		now = datetime.now(tz=TIMEZONE).replace(second=0, microsecond=0) # round to minute
 
-	if not member:
-		await interaction.response.send_message("user not found", ephemeral=True)
-		return
+		# assume time without additional info will be in future pm
+		if parsedTime.date() == now.date() and 'am' not in time.lower() and parsedTime.hour < 12 and parsedTime.replace(second=0, microsecond=0) <= now:
+			time = time + ' pm'
+			parsedTime = parse(time, settings=settings)
+		print('now', now, now.tzinfo, 'target', parsedTime, parsedTime.tzinfo)
 
-	if member and member.voice and member.voice.channel:
-		await interaction.response.send_message("already in vc", ephemeral=True)
-		return
+		if parsedTime < now:
+			await interaction.response.send_message("past time", ephemeral=True)
+			return
 
-	global latestTarget
-	latestTarget = parsedTime
+		member = client.get_guild(GUILD_ID).get_member(USER_ID)
 
-	stop.clear()
-	asyncio.ensure_future(schedule_task(parsedTime))
+		if not member:
+			await interaction.response.send_message("user not found", ephemeral=True)
+			return
 
-	await interaction.response.send_message(f"{(member.nick if member.nick else member.name) if member else USER_ID} better join <t:{int(parsedTime.timestamp())}:R>")
+		if member and member.voice and member.voice.channel:
+			await interaction.response.send_message("already in vc", ephemeral=True)
+			return
+
+		global latestTarget
+		latestTarget = parsedTime
+
+		stop.clear()
+		asyncio.ensure_future(schedule_task(parsedTime))
+
+		await interaction.response.send_message(f"{(member.nick if member.nick else member.name) if member else USER_ID} better join <t:{int(parsedTime.timestamp())}:R>")
+	except DiscordException as e:
+		await interaction.response.send_message(str(e), ephemeral=True)
 
 @tree.command(
 	name="cancel",
@@ -113,15 +119,18 @@ async def joinalert(interaction: discord.Interaction, time: str):
 	guild=discord.Object(id=GUILD_ID)
 )
 async def cancel(interaction: discord.Interaction):
-	if interaction.user.id not in MOD_IDS:
-		await interaction.response.send_message("you thought", ephemeral=True)
-		return
+	try:
+		if interaction.user.id not in MOD_IDS:
+			await interaction.response.send_message("you thought", ephemeral=True)
+			return
 
-	global latestTarget
-	latestTarget = None
+		global latestTarget
+		latestTarget = None
 
-	stop.set()
-	await interaction.response.send_message("canceled", ephemeral=True)
+		stop.set()
+		await interaction.response.send_message("canceled", ephemeral=True)
+	except DiscordException as e:
+		await interaction.response.send_message(str(e), ephemeral=True)
 
 @client.event
 async def on_ready():
