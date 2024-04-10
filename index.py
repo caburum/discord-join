@@ -34,7 +34,7 @@ latestTarget: datetime | None = None
 async def schedule_task(targetTime: datetime):
 	global latestTarget
 
-	time_difference = (targetTime - datetime.now()).total_seconds()
+	time_difference = (targetTime - datetime.now(tz=targetTime.tzinfo)).total_seconds()
 	if time_difference > 0:
 		await asyncio.sleep(time_difference)
 	
@@ -80,10 +80,10 @@ async def joinalert(interaction: discord.Interaction, time: str):
 	now = datetime.now(tz=TIMEZONE).replace(second=0, microsecond=0) # round to minute
 
 	# assume time without additional info will be in future pm
-	if parsedTime.date() == now.date() and 'am' not in time.lower() and parsedTime.hour < 12 and parsedTime.hour < now.hour:
+	if parsedTime.date() == now.date() and 'am' not in time.lower() and parsedTime.hour < 12 and parsedTime.replace(second=0, microsecond=0) <= now:
 		time = time + ' pm'
 		parsedTime = parse(time, settings=settings)
-	print('now', datetime.now(tz=TIMEZONE), TIMEZONE, 'target', parsedTime, parsedTime.tzinfo)
+	print('now', now, now.tzinfo, 'target', parsedTime, parsedTime.tzinfo)
 
 	if parsedTime < now:
 		await interaction.response.send_message("past time", ephemeral=True)
