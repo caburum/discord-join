@@ -16,11 +16,7 @@ MOD_IDS = [int(id) for id in environ.get('MOD_IDS').split(',')]
 TIMEZONE = pytz.timezone(environ.get('TIMEZONE'))
 
 class MyClient(discord.Client):
-	async def on_ready(self):
-		print(f'Logged on as {self.user}!')
-
-	# async def on_message(self, message):
-	# 	print(f'Message from {message.author}: {message.content}')
+	pass
 
 intents = discord.Intents.default()
 # intents.message_content = True
@@ -38,7 +34,7 @@ async def schedule_task(targetTime: datetime):
 	if time_difference > 0:
 		await asyncio.sleep(time_difference)
 	
-	if latestTarget != targetTime: return
+	if latestTarget != targetTime or stop.is_set(): return
 
 	text = f"<@{USER_ID}> you're late"
 
@@ -57,6 +53,9 @@ async def schedule_task(targetTime: datetime):
 @client.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
 	if before.channel is None and after.channel and member.id == USER_ID:
+		global latestTarget
+		latestTarget = None
+
 		stop.set()
 
 tree = app_commands.CommandTree(client)
@@ -135,6 +134,6 @@ async def cancel(interaction: discord.Interaction):
 @client.event
 async def on_ready():
 	await tree.sync(guild=discord.Object(id=GUILD_ID))
-	print("Ready!")
+	print("logged in as", client.user)
 
 client.run(environ.get('DISCORD_TOKEN'))
